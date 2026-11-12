@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City Puzzle – User vs AI</title>
+<style>
+  :root {
+    --bg: #1a1f2e;
+    --panel: #252b3b;
+    --accent: #4fc3f7;
+    --text: #e8eaf0;
+    --muted: #8b93a7;
+    --residential: #66bb6a;
+    --commercial: #42a5f5;
+    --industrial: #ff7043;
+    --park: #81c784;
+    --road: #78909c;
+    --special: #ab47bc;
+    --win: #66bb6a;
+    --lose: #ef5350;
+    --timer-ok: #66bb6a;
+    --timer-warn: #ffb300;
+    --timer-danger: #ef5350;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 { font-size: 1.7rem; margin-bottom: 2px; letter-spacing: -0.5px; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 18px; }
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+  button, select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid #3a4155;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  button.primary {
+    background: var(--accent);
+    color: #111;
+    border: none;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status-bar {
+    display: flex;
+    gap: 18px;
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+  }
+  .status-bar .label { color: var(--muted); }
+  .status-bar strong { color: var(--text); font-size: 1.05rem; }
+  .score-box {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 8px 16px;
+    display: flex;
+    gap: 24px;
+    margin-bottom: 10px;
+    font-size: 1.05rem;
+  }
+  .score-box .you { color: var(--accent); }
+  .score-box .ai { color: #ffab40; }
+  .timer-box {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 6px 18px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    min-width: 70px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+  .timer-box.ok { color: var(--timer-ok); }
+  .timer-box.warn { color: var(--timer-warn); }
+  .timer-box.danger { color: var(--timer-danger); animation: pulse 0.6s infinite alternate; }
+  @keyframes pulse {
+    from { opacity: 1; }
+    to { opacity: 0.55; }
+  }
+  #message {
+    min-height: 28px;
+    font-size: 0.95rem;
+    color: var(--accent);
+    margin-bottom: 12px;
+    text-align: center;
+    font-weight: 500;
+  }
+  #message.win { color: var(--win); }
+  #message.lose { color: var(--lose); }
+  .board-wrap {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  #grid {
+    display: grid;
+    gap: 3px;
+    background: #1e2433;
+    padding: 4px;
+    border-radius: 8px;
+  }
+  .cell {
+    width: 46px;
+    height: 46px;
+    background: #2a3142;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    user-select: none;
+    transition: background 0.12s, outline 0.12s;
+  }
+  .cell.drop-target {
+    outline: 2px dashed var(--accent);
+    background: #2e3a4f;
+  }
+  .cell.filled { cursor: default; }
+  .hand-area {
+    margin-top: 18px;
+    text-align: center;
+  }
+  .hand-area h3 {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+  #hand {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    min-height: 62px;
+  }
+  .tile {
+    width: 54px;
+    height: 54px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.55rem;
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.1s, opacity 0.1s;
+    user-select: none;
+  }
+  .tile:active { cursor: grabbing; }
+  .tile.dragging { opacity: 0.5; transform: scale(0.9); }
+  .tile.residential { background: var(--residential); }
+  .tile.commercial  { background: var(--commercial); }
+  .tile.industrial  { background: var(--industrial); }
+  .tile.park        { background: var(--park); }
+  .tile.road        { background: var(--road); }
+  .tile.special     { background: var(--special); }
+  .legend {
+    margin-top: 16px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; }
+  .footer {
+    margin-top: 20px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 420px;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+  <h1>City Puzzle</h1>
+  <p class="subtitle">Drag & drop · 15 rounds · 25 s per turn · Highest score wins</p>
+
+  <div class="controls">
+    <select id="difficulty">
+      <option value="easy">Easy – 6×6 grid</option>
+      <option value="normal" selected>Normal – 8×8 grid</option>
+      <option value="hard">Hard – 10×10 grid</option>
+    </select>
+    <button class="primary" id="startBtn">New Game</button>
+  </div>
+
+  <div class="score-box">
+    <div>You: <strong class="you" id="playerScore">0</strong></div>
+    <div>AI: <strong class="ai" id="aiScore">0</strong></div>
+  </div>
+
+  <div class="status-bar">
+    <div><span class="label">Round</span> <strong id="round">0 / 15</strong></div>
+    <div><span class="label">Turn</span> <strong id="whoseTurn">–</strong></div>
+    <div class="timer-box ok" id="timer">–</div>
+  </div>
+
+  <div id="message">Choose difficulty and press New Game</div>
+
+  <div class="board-wrap">
+    <div id="grid"></div>
+  </div>
+
+  <div class="hand-area">
+    <h3>Your tiles – drag onto an empty cell</h3>
+    <div id="hand"></div>
+  </div>
+
+  <div class="legend">
+    <span><div class="dot" style="background:var(--residential)"></div> Residential</span>
+    <span><div class="dot" style="background:var(--commercial)"></div> Commercial</span>
+    <span><div class="dot" style="background:var(--industrial)"></div> Industrial</span>
+    <span><div class="dot" style="background:var(--park)"></div> Park</span>
+    <span><div class="dot" style="background:var(--road)"></div> Road</span>
+    <span><div class="dot" style="background:var(--special)"></div> Special</span>
+  </div>
+
+  <p class="footer">
+    You have 25 seconds each turn. If time runs out the AI plays instead.
+    Place matching tiles next to each other for bonus points. After 15 rounds the higher score wins.
+  </p>
+
+<script>
+(() => {
+  const TILES = [
+    { type: 'residential', emoji: '🏠', label: 'Residential' },
+    { type: 'commercial',  emoji: '🏢', label: 'Commercial' },
+    { type: 'industrial',  emoji: '🏭', label: 'Industrial' },
+    { type: 'park',        emoji: '🌳', label: 'Park' },
+    { type: 'road',        emoji: '🛣️', label: 'Road' },
+    { type: 'special',     emoji: '🎁', label: 'Special' }
+  ];
+
+  const DIFF = {
+    easy:   { size: 6,  handSize: 4, aiSmart: 0.30 },
+    normal: { size: 8,  handSize: 4, aiSmart: 0.55 },
+    hard:   { size: 10, handSize: 3, aiSmart: 0.82 }
+  };
+
+  const TOTAL_ROUNDS = 15;
+  const TURN_SECONDS = 25;
+
+  let state = {
+    grid: [],
+    size: 8,
+    playerScore: 0,
+    aiScore: 0,
+    round: 0,
+    hand: [],
+    currentPlayer: 'human',
+    gameOver: true,
+    aiSmart: 0.55,
+    handSize: 4,
+    timeLeft: TURN_SECONDS
+  };
+
+  let timerId = null;
+
+  const gridEl   = document.getElementById('grid');
+  const handEl   = document.getElementById('hand');
+  const msgEl    = document.getElementById('message');
+  const timerEl  = document.getElementById('timer');
+  const startBtn = document.getElementById('startBtn');
+
+  function setMsg(text, cls = '') {
+    msgEl.textContent = text;
+    msgEl.className = cls;
+  }
+
+  function updateUI() {
+    document.getElementById('playerScore').textContent = state.playerScore;
+    document.getElementById('aiScore').textContent = state.aiScore;
+    document.getElementById('round').textContent = `${state.round} / ${TOTAL_ROUNDS}`;
+    document.getElementById('whoseTurn').textContent =
+      state.gameOver ? 'Game over' :
+      state.currentPlayer === 'human' ? 'You' : 'AI';
+  }
+
+  function updateTimerDisplay() {
+    timerEl.textContent = state.gameOver ? '–' : state.timeLeft;
+    timerEl.classList.remove('ok', 'warn', 'danger');
+    if (state.gameOver || state.currentPlayer !== 'human') {
+      timerEl.classList.add('ok');
+      return;
+    }
+    if (state.timeLeft <= 5) timerEl.classList.add('danger');
+    else if (state.timeLeft <= 10) timerEl.classList.add('warn');
+    else timerEl.classList.add('ok');
+  }
+
+  function stopTimer() {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function startPlayerTimer() {
+    stopTimer();
+    state.timeLeft = TURN_SECONDS;
+    updateTimerDisplay();
+
+    timerId = setInterval(() => {
+      state.timeLeft--;
+      updateTimerDisplay();
+
+      if (state.timeLeft <= 0) {
+        stopTimer();
+        // Time out → skip player turn, let AI play
+        setMsg('Time’s up! AI takes the turn…');
+        state.currentPlayer = 'ai';
+        updateUI();
+        setTimeout(aiTurn, 600);
+      }
+    }, 1000);
+  }
+
+  function randomTile() {
+    if (Math.random() < 0.11) return TILES[5];
+    return TILES[Math.floor(Math.random() * 5)];
+  }
+
+  function createGrid() {
+    gridEl.innerHTML = '';
+    gridEl.style.gridTemplateColumns = `repeat(${state.size}, 46px)`;
+    state.grid = Array.from({ length: state.size }, () =>
+      Array.from({ length: state.size }, () => null)
+    );
+
+    for (let r = 0; r < state.size; r++) {
+      for (let c = 0; c < state.size; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        cell.addEventListener('dragover', onDragOver);
+        cell.addEventListener('dragleave', onDragLeave);
+        cell.addEventListener('drop', onDrop);
+        gridEl.appendChild(cell);
+      }
+    }
+  }
+
+  function renderGrid() {
+    const cells = gridEl.querySelectorAll('.cell');
+    cells.forEach(cell => {
+      const r = +cell.dataset.r;
+      const c = +cell.dataset.c;
+      const tile = state.grid[r][c];
+      if (tile) {
+        cell.textContent = tile.emoji;
+        cell.className = `cell filled ${tile.type}`;
+        cell.style.background = getComputedStyle(document.documentElement)
+          .getPropertyValue(`--${tile.type}`).trim() || '#444';
+      } else {
+        cell.textContent = '';
+        cell.className = 'cell';
+        cell.style.background = '';
+      }
+    });
+  }
+
+  function fillHand() {
+    while (state.hand.length < state.handSize) {
+      state.hand.push(randomTile());
+    }
+    renderHand();
+  }
+
+  function renderHand() {
+    handEl.innerHTML = '';
+    state.hand.forEach((tile, idx) => {
+      const el = document.createElement('div');
+      el.className = `tile ${tile.type}`;
+      el.textContent = tile.emoji;
+      el.draggable = !state.gameOver && state.currentPlayer === 'human';
+      el.dataset.idx = idx;
+      el.title = tile.label;
+      el.addEventListener('dragstart', onDragStart);
+      el.addEventListener('dragend', onDragEnd);
+      handEl.appendChild(el);
+    });
+  }
+
+  // ---------- Drag & Drop ----------
+  let dragIdx = null;
+
+  function onDragStart(e) {
+    if (state.gameOver || state.currentPlayer !== 'human') {
+      e.preventDefault();
+      return;
+    }
+    dragIdx = +e.target.dataset.idx;
+    e.target.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', dragIdx);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onDragEnd(e) {
+    e.target.classList.remove('dragging');
+    dragIdx = null;
+    document.querySelectorAll('.cell.drop-target')
+      .forEach(c => c.classList.remove('drop-target'));
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    if (state.gameOver || state.currentPlayer !== 'human') return;
+    const cell = e.currentTarget;
+    if (!cell.classList.contains('filled')) {
+      cell.classList.add('drop-target');
+    }
+  }
+
+  function onDragLeave(e) {
+    e.currentTarget.classList.remove('drop-target');
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    const cell = e.currentTarget;
+    cell.classList.remove('drop-target');
+    if (state.gameOver || state.currentPlayer !== 'human') return;
+
+    const r = +cell.dataset.r;
+    const c = +cell.dataset.c;
+    if (state.grid[r][c]) return;
+
+    const idx = dragIdx !== null ? dragIdx : +e.dataTransfer.getData('text/plain');
+    if (idx < 0 || idx >= state.hand.length) return;
+
+    stopTimer(); // player acted in time
+
+    const tile = state.hand[idx];
+    placeTile(r, c, tile, 'human');
+    state.hand.splice(idx, 1);
+    fillHand();
+
+    if (!state.gameOver) {
+      state.currentPlayer = 'ai';
+      updateUI();
+      updateTimerDisplay();
+      setMsg('AI is thinking…');
+      setTimeout(aiTurn, 380 + Math.random() * 420);
+    }
+  }
+
+  // ---------- Placement & Scoring ----------
+  function placeTile(r, c, tile, who) {
+    state.grid[r][c] = tile;
+    const points = scorePlacement(r, c, tile);
+
+    if (who === 'human') {
+      state.playerScore += points;
+      setMsg(`You placed ${tile.label}  (+${points} pts)`);
+    } else {
+      state.aiScore += points;
+      setMsg(`AI placed ${tile.label}  (+${points} pts)`);
+    }
+
+    renderGrid();
+    updateUI();
+
+    // One full round = human move + AI move
+    if (who === 'ai') {
+      state.round++;
+      updateUI();
+      if (state.round >= TOTAL_ROUNDS) {
+        endGame();
+      }
+    }
+  }
+
+  function scorePlacement(r, c, tile) {
+    let pts = 1;
+    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    let matches = 0;
+    let roadLinks = 0;
+
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= state.size || nc < 0 || nc >= state.size) continue;
+      const n = state.grid[nr][nc];
+      if (!n) continue;
+      if (n.type === tile.type) matches++;
+      if (n.type === 'road' || tile.type === 'road') roadLinks++;
+    }
+
+    pts += matches * 3;
+    if (tile.type === 'road') pts += roadLinks;
+    if (tile.type === 'special') pts += 3 + matches;
+    if (matches >= 2) pts += 2;
+
+    return pts;
+  }
+
+  // ---------- AI ----------
+  function aiTurn() {
+    if (state.gameOver) return;
+
+    const empty = [];
+    for (let r = 0; r < state.size; r++) {
+      for (let c = 0; c < state.size; c++) {
+        if (!state.grid[r][c]) empty.push({ r, c });
+      }
+    }
+
+    if (empty.length === 0) {
+      endGame();
+      return;
+    }
+
+    const tile = randomTile();
+    let best = null;
+    let bestScore = -1;
+
+    const candidates = empty.slice();
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const limit = Math.max(5, Math.floor(candidates.length * state.aiSmart));
+    const toCheck = candidates.slice(0, limit);
+
+    for (const pos of toCheck) {
+      state.grid[pos.r][pos.c] = tile;
+      const sc = scorePlacement(pos.r, pos.c, tile);
+      state.grid[pos.r][pos.c] = null;
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = pos;
+      }
+    }
+
+    if (!best || Math.random() > state.aiSmart) {
+      best = empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    placeTile(best.r, best.c, tile, 'ai');
+
+    if (!state.gameOver) {
+      state.currentPlayer = 'human';
+      updateUI();
+      setMsg('Your turn – drag a tile (25 s)');
+      renderHand();
+      startPlayerTimer();
+    }
+  }
+
+  // ---------- End game ----------
+  function endGame() {
+    stopTimer();
+    state.gameOver = true;
+    state.currentPlayer = null;
+    renderHand();
+    updateUI();
+    updateTimerDisplay();
+
+    let text, cls;
+    if (state.playerScore > state.aiScore) {
+      text = `You win!  Final score  ${state.playerScore} – ${state.aiScore}`;
+      cls = 'win';
+    } else if (state.playerScore < state.aiScore) {
+      text = `AI wins.  Final score  ${state.playerScore} – ${state.aiScore}`;
+      cls = 'lose';
+    } else {
+      text = `Draw!  Final score  ${state.playerScore} – ${state.aiScore}`;
+      cls = '';
+    }
+    setMsg(text, cls);
+  }
+
+  // ---------- Start ----------
+  function startGame() {
+    stopTimer();
+    const key = document.getElementById('difficulty').value;
+    const d = DIFF[key];
+
+    state = {
+      grid: [],
+      size: d.size,
+      playerScore: 0,
+      aiScore: 0,
+      round: 0,
+      hand: [],
+      currentPlayer: 'human',
+      gameOver: false,
+      aiSmart: d.aiSmart,
+      handSize: d.handSize,
+      timeLeft: TURN_SECONDS
+    };
+
+    createGrid();
+    fillHand();
+    updateUI();
+    setMsg('Round 1 – drag a tile onto an empty cell (25 s)');
+    startPlayerTimer();
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  // Initial empty board
+  state.size = 8;
+  createGrid();
+  updateUI();
+  updateTimerDisplay();
+})();
+</script>
+</body>
+</html>
