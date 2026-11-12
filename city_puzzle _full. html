@@ -1,0 +1,10 @@
+# New Features 
+25-second timer on every player turn
+Timer colour:
+Green → normal
+Yellow → ≤ 10 seconds
+Red + pulse → ≤ 5 seconds
+If the timer hits 0, your turn is skipped and the AI plays instead
+Timer resets each time it becomes your turn
+Timer stops when the game ends
+Open the HTML file and start a new game to try it.
