@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City Puzzle – User vs AI</title>
+<style>
+  :root {
+    --bg: #1a1f2e;
+    --panel: #252b3b;
+    --accent: #4fc3f7;
+    --text: #e8eaf0;
+    --muted: #8b93a7;
+    --residential: #66bb6a;
+    --commercial: #42a5f5;
+    --industrial: #ff7043;
+    --park: #81c784;
+    --road: #78909c;
+    --special: #ab47bc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  button, select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid #3a4155;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #111; border: none; font-weight: 600; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .status-bar {
+    display: flex;
+    gap: 24px;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .status-bar span { color: var(--muted); }
+  .status-bar strong { color: var(--text); }
+  #message {
+    min-height: 24px;
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  .board-wrap {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  #grid {
+    display: grid;
+    gap: 3px;
+    background: #1e2433;
+    padding: 4px;
+    border-radius: 8px;
+  }
+  .cell {
+    width: 48px;
+    height: 48px;
+    background: #2a3142;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    cursor: default;
+    transition: background 0.15s, transform 0.1s;
+    user-select: none;
+  }
+  .cell.drop-target { outline: 2px dashed var(--accent); background: #2e3a4f; }
+  .cell.filled { cursor: default; }
+  .hand-area {
+    margin-top: 20px;
+    text-align: center;
+  }
+  .hand-area h3 { font-size: 0.95rem; color: var(--muted); margin-bottom: 10px; }
+  #hand {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    min-height: 64px;
+  }
+  .tile {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.12s, box-shadow 0.12s;
+    user-select: none;
+  }
+  .tile:active { cursor: grabbing; }
+  .tile.dragging { opacity: 0.55; transform: scale(0.92); }
+  .tile.residential { background: var(--residential); }
+  .tile.commercial { background: var(--commercial); }
+  .tile.industrial { background: var(--industrial); }
+  .tile.park { background: var(--park); }
+  .tile.road { background: var(--road); }
+  .tile.special { background: var(--special); }
+  .legend {
+    margin-top: 18px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .dot {
+    width: 12px; height: 12px; border-radius: 3px;
+  }
+  .footer {
+    margin-top: 24px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 420px;
+  }
+</style>
+</head>
+<body>
+  <h1>City Puzzle</h1>
+  <p class="subtitle">Drag tiles onto the grid · Beat the AI</p>
+
+  <div class="controls">
+    <select id="difficulty">
+      <option value="easy">Easy (6×6 · 18 turns)</option>
+      <option value="normal" selected>Normal (8×8 · 14 turns)</option>
+      <option value="hard">Hard (10×10 · 10 turns)</option>
+    </select>
+    <button class="primary" id="startBtn">New Game</button>
+  </div>
+
+  <div class="status-bar">
+    <div>Turn: <strong id="turn">–</strong></div>
+    <div>You: <strong id="playerScore">0</strong></div>
+    <div>AI: <strong id="aiScore">0</strong></div>
+    <div>Left: <strong id="turnsLeft">–</strong></div>
+  </div>
+  <div id="message">Choose difficulty and press New Game</div>
+
+  <div class="board-wrap">
+    <div id="grid"></div>
+  </div>
+
+  <div class="hand-area">
+    <h3>Your tiles (drag onto the grid)</h3>
+    <div id="hand"></div>
+  </div>
+
+  <div class="legend">
+    <span><div class="dot" style="background:var(--residential)"></div> Residential</span>
+    <span><div class="dot" style="background:var(--commercial)"></div> Commercial</span>
+    <span><div class="dot" style="background:var(--industrial)"></div> Industrial</span>
+    <span><div class="dot" style="background:var(--park)"></div> Park</span>
+    <span><div class="dot" style="background:var(--road)"></div> Road</span>
+    <span><div class="dot" style="background:var(--special)"></div> Special</span>
+  </div>
+
+  <p class="footer">
+    Score points by placing matching tiles next to each other and connecting roads.
+    AI plays after every move you make. Highest score when turns run out wins.
+  </p>
+
+<script>
+(() => {
+  const TILES = [
+    { type: 'residential', emoji: '🏠', label: 'Residential' },
+    { type: 'commercial',  emoji: '🏢', label: 'Commercial' },
+    { type: 'industrial',  emoji: '🏭', label: 'Industrial' },
+    { type: 'park',        emoji: '🌳', label: 'Park' },
+    { type: 'road',        emoji: '🛣️', label: 'Road' },
+    { type: 'special',     emoji: '🎁', label: 'Special' }
+  ];
+
+  const DIFF = {
+    easy:   { size: 6,  turns: 18, handSize: 4, aiSmart: 0.25 },
+    normal: { size: 8,  turns: 14, handSize: 4, aiSmart: 0.55 },
+    hard:   { size: 10, turns: 10, handSize: 3, aiSmart: 0.85 }
+  };
+
+  let state = {
+    grid: [],
+    size: 8,
+    playerScore: 0,
+    aiScore: 0,
+    turn: 0,
+    maxTurns: 14,
+    hand: [],
+    currentPlayer: 'human',
+    gameOver: true,
+    aiSmart: 0.55
+  };
+
+  const gridEl = document.getElementById('grid');
+  const handEl = document.getElementById('hand');
+  const msgEl  = document.getElementById('message');
+  const startBtn = document.getElementById('startBtn');
+
+  function setMsg(text) { msgEl.textContent = text; }
+
+  function updateUI() {
+    document.getElementById('turn').textContent = state.turn;
+    document.getElementById('playerScore').textContent = state.playerScore;
+    document.getElementById('aiScore').textContent = state.aiScore;
+    document.getElementById('turnsLeft').textContent = Math.max(0, state.maxTurns - state.turn);
+  }
+
+  function randomTile() {
+    // Special tiles are rarer
+    if (Math.random() < 0.12) return TILES[5];
+    return TILES[Math.floor(Math.random() * 5)];
+  }
+
+  function createGrid() {
+    gridEl.innerHTML = '';
+    gridEl.style.gridTemplateColumns = `repeat(${state.size}, 48px)`;
+    state.grid = Array.from({ length: state.size }, () =>
+      Array.from({ length: state.size }, () => null)
+    );
+
+    for (let r = 0; r < state.size; r++) {
+      for (let c = 0; c < state.size; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        cell.addEventListener('dragover', onDragOver);
+        cell.addEventListener('dragleave', onDragLeave);
+        cell.addEventListener('drop', onDrop);
+        gridEl.appendChild(cell);
+      }
+    }
+  }
+
+  function renderGrid() {
+    const cells = gridEl.querySelectorAll('.cell');
+    cells.forEach(cell => {
+      const r = +cell.dataset.r;
+      const c = +cell.dataset.c;
+      const tile = state.grid[r][c];
+      if (tile) {
+        cell.textContent = tile.emoji;
+        cell.className = `cell filled ${tile.type}`;
+        cell.style.background = getComputedStyle(document.documentElement)
+          .getPropertyValue(`--${tile.type}`).trim() || '#444';
+      } else {
+        cell.textContent = '';
+        cell.className = 'cell';
+        cell.style.background = '';
+      }
+    });
+  }
+
+  function fillHand() {
+    while (state.hand.length < DIFF[document.getElementById('difficulty').value].handSize) {
+      state.hand.push(randomTile());
+    }
+    renderHand();
+  }
+
+  function renderHand() {
+    handEl.innerHTML = '';
+    state.hand.forEach((tile, idx) => {
+      const el = document.createElement('div');
+      el.className = `tile ${tile.type}`;
+      el.textContent = tile.emoji;
+      el.draggable = !state.gameOver && state.currentPlayer === 'human';
+      el.dataset.idx = idx;
+      el.title = tile.label;
+      el.addEventListener('dragstart', onDragStart);
+      el.addEventListener('dragend', onDragEnd);
+      handEl.appendChild(el);
+    });
+  }
+
+  // --- Drag & Drop ---
+  let dragIdx = null;
+
+  function onDragStart(e) {
+    if (state.gameOver || state.currentPlayer !== 'human') {
+      e.preventDefault();
+      return;
+    }
+    dragIdx = +e.target.dataset.idx;
+    e.target.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', dragIdx);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onDragEnd(e) {
+    e.target.classList.remove('dragging');
+    dragIdx = null;
+    document.querySelectorAll('.cell.drop-target').forEach(c => c.classList.remove('drop-target'));
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    if (state.gameOver || state.currentPlayer !== 'human') return;
+    const cell = e.currentTarget;
+    if (!cell.classList.contains('filled')) {
+      cell.classList.add('drop-target');
+    }
+  }
+
+  function onDragLeave(e) {
+    e.currentTarget.classList.remove('drop-target');
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    const cell = e.currentTarget;
+    cell.classList.remove('drop-target');
+    if (state.gameOver || state.currentPlayer !== 'human') return;
+
+    const r = +cell.dataset.r;
+    const c = +cell.dataset.c;
+    if (state.grid[r][c]) return; // already occupied
+
+    const idx = dragIdx !== null ? dragIdx : +e.dataTransfer.getData('text/plain');
+    if (idx < 0 || idx >= state.hand.length) return;
+
+    placeTile(r, c, state.hand[idx], 'human');
+    state.hand.splice(idx, 1);
+    fillHand();
+    renderHand();
+
+    if (!state.gameOver) {
+      state.currentPlayer = 'ai';
+      setMsg('AI is thinking…');
+      setTimeout(aiTurn, 450 + Math.random() * 400);
+    }
+  }
+
+  // --- Placement & Scoring ---
+  function placeTile(r, c, tile, who) {
+    state.grid[r][c] = tile;
+    const points = scorePlacement(r, c, tile);
+    if (who === 'human') {
+      state.playerScore += points;
+      setMsg(`You placed ${tile.label} (+${points})`);
+    } else {
+      state.aiScore += points;
+      setMsg(`AI placed ${tile.label} (+${points})`);
+    }
+    renderGrid();
+    updateUI();
+
+    state.turn++;
+    if (state.turn >= state.maxTurns) {
+      endGame();
+    }
+  }
+
+  function scorePlacement(r, c, tile) {
+    let pts = 1; // base
+    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    let matches = 0;
+    let roads = 0;
+
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= state.size || nc < 0 || nc >= state.size) continue;
+      const n = state.grid[nr][nc];
+      if (!n) continue;
+      if (n.type === tile.type) matches++;
+      if (n.type === 'road' || tile.type === 'road') roads++;
+      if (tile.type === 'special') pts += 2;
+    }
+    pts += matches * 3;
+    if (tile.type === 'road') pts += roads;
+    if (matches >= 2) pts += 2; // bonus cluster
+    return pts;
+  }
+
+  // --- Simple AI ---
+  function aiTurn() {
+    if (state.gameOver) return;
+
+    const empty = [];
+    for (let r = 0; r < state.size; r++) {
+      for (let c = 0; c < state.size; c++) {
+        if (!state.grid[r][c]) empty.push({ r, c });
+      }
+    }
+    if (empty.length === 0) {
+      endGame();
+      return;
+    }
+
+    // AI draws its own tile each turn (simpler for prototype)
+    const tile = randomTile();
+    let best = null;
+    let bestScore = -1;
+
+    // Evaluate a subset of cells depending on difficulty
+    const candidates = empty.slice();
+    // shuffle
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const limit = Math.max(4, Math.floor(candidates.length * state.aiSmart));
+    const toCheck = candidates.slice(0, limit);
+
+    for (const pos of toCheck) {
+      // temporarily place
+      state.grid[pos.r][pos.c] = tile;
+      const sc = scorePlacement(pos.r, pos.c, tile);
+      state.grid[pos.r][pos.c] = null;
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = pos;
+      }
+    }
+
+    // Sometimes pick random even on hard (to feel human)
+    if (Math.random() > state.aiSmart || !best) {
+      best = empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    placeTile(best.r, best.c, tile, 'ai');
+
+    if (!state.gameOver) {
+      state.currentPlayer = 'human';
+      setMsg('Your turn – drag a tile onto the grid');
+      renderHand();
+    }
+  }
+
+  function endGame() {
+    state.gameOver = true;
+    state.currentPlayer = null;
+    renderHand();
+    let result;
+    if (state.playerScore > state.aiScore) result = 'You win! 🎉';
+    else if (state.playerScore < state.aiScore) result = 'AI wins.';
+    else result = "It's a draw.";
+    setMsg(`Game over – ${result}  Final ${state.playerScore} : ${state.aiScore}`);
+  }
+
+  function startGame() {
+    const diffKey = document.getElementById('difficulty').value;
+    const d = DIFF[diffKey];
+    state = {
+      grid: [],
+      size: d.size,
+      playerScore: 0,
+      aiScore: 0,
+      turn: 0,
+      maxTurns: d.turns,
+      hand: [],
+      currentPlayer: 'human',
+      gameOver: false,
+      aiSmart: d.aiSmart
+    };
+    createGrid();
+    fillHand();
+    updateUI();
+    setMsg('Your turn – drag a tile onto an empty cell');
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  // Initial empty board
+  state.size = 8;
+  createGrid();
+  updateUI();
+})();
+</script>
+</body>
+</html>
